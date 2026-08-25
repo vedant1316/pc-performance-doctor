@@ -72,3 +72,44 @@ export interface DiagnosisResult {
   };
   llm_call_succeeded: boolean;
 }
+
+export interface TimelineSnapshotRow {
+  id: number;
+  timestamp: string;
+  cpu_percent: number;
+  cpu_temp_c?: number | null;
+  ram_percent: number;
+  ram_available_mb: number;
+  pagefile_percent?: number | null;
+  disk_percent_busy: number;
+  disk_read_bps?: number | null;
+  disk_write_bps?: number | null;
+  gpu_percent?: number | null;
+  gpu_temp_c?: number | null;
+  gpu_vram_percent?: number | null;
+  net_sent_bps?: number | null;
+  net_recv_bps?: number | null;
+}
+
+export interface TimelineDiagnosisRow {
+  id: number;
+  snapshot_id: number;
+  timestamp: string;
+  label: string;
+  rule_id: string;
+  severity: string;
+  health_score: number;
+  contributing_processes: string[];
+  llm_summary?: string | null;
+  llm_root_cause?: string | null;
+  llm_fixes?: DiagnosisFix[] | null;
+  llm_expected_improvement?: string | null;
+  llm_call_succeeded: boolean;
+}
+
+export interface TimelineResult {
+  type: 'timeline_result';
+  snapshots: TimelineSnapshotRow[];
+  diagnoses: TimelineDiagnosisRow[];
+}
+

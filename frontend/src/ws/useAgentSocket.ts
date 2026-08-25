@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ConnectionStatus, MetricsTick, DiagnosisResult } from '../types/telemetry';
+import { ConnectionStatus, MetricsTick, DiagnosisResult, TimelineResult } from '../types/telemetry';
 
 const DEFAULT_WS_URL = 'ws://127.0.0.1:8765';
 const MAX_HISTORY_LENGTH = 40;
@@ -11,7 +11,9 @@ export interface UseAgentSocketReturn {
   history: MetricsTick[];
   latencyMs: number | null;
   lastDiagnosis: DiagnosisResult | null;
+  lastTimelineResult: TimelineResult | null;
   sendMessage: (data: unknown) => void;
+  queryTimeline: (start?: string, end?: string) => void;
   reconnect: () => void;
 }
 
@@ -21,6 +23,7 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
   const [history, setHistory] = useState<MetricsTick[]>([]);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastDiagnosis, setLastDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [lastTimelineResult, setLastTimelineResult] = useState<TimelineResult | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -83,6 +86,8 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
             }
           } else if (data.type === 'diagnosis_result') {
             setLastDiagnosis(data as DiagnosisResult);
+          } else if (data.type === 'timeline_result') {
+            setLastTimelineResult(data as TimelineResult);
           }
         } catch (err) {
           console.error('Failed to parse incoming WebSocket message:', err);
@@ -124,6 +129,14 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
     }
   }, []);
 
+  const queryTimeline = useCallback((start?: string, end?: string) => {
+    sendMessage({
+      type: 'timeline_query',
+      start: start || '',
+      end: end || '',
+    });
+  }, [sendMessage]);
+
   const reconnect = useCallback(() => {
     reconnectAttemptsRef.current = 0;
     connect();
@@ -146,7 +159,10 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
     history,
     latencyMs,
     lastDiagnosis,
+    lastTimelineResult,
     sendMessage,
+    queryTimeline,
     reconnect,
   };
 }
+

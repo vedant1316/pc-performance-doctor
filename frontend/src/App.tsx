@@ -15,7 +15,9 @@ export const App: React.FC = () => {
     history,
     latencyMs,
     lastDiagnosis,
+    lastTimelineResult,
     sendMessage,
+    queryTimeline,
     reconnect,
   } = useAgentSocket();
 
@@ -56,7 +58,13 @@ export const App: React.FC = () => {
           />
         )}
 
-        {activeTab === 'timeline' && <Timeline />}
+        {activeTab === 'timeline' && (
+          <Timeline
+            timelineResult={lastTimelineResult}
+            onQueryTimeline={queryTimeline}
+            isConnected={status === 'connected'}
+          />
+        )}
 
         {activeTab === 'report' && <HealthReport />}
       </main>
@@ -64,7 +72,7 @@ export const App: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>PC Performance Doctor • Phase 3 Diagnostic Engine</span>
+          <span>PC Performance Doctor • Phase 4 SQLite Persistence & Timeline</span>
           <span className="font-mono text-[11px] text-slate-600">
             WebSocket: ws://127.0.0.1:8765
           </span>

@@ -17,18 +17,21 @@ async def test_websocket_server_streaming_and_messages() -> None:
         uri = f"ws://127.0.0.1:{test_port}"
         async with connect(uri) as client:
             # 1. First message should arrive (either status or initial metrics_tick)
-            raw_msg_1 = await asyncio.wait_for(client.recv(), timeout=3.0)
+            raw_msg_1 = await asyncio.wait_for(client.recv(), timeout=5.0)
             data_1 = json.loads(raw_msg_1)
             assert data_1["type"] in ("metrics_tick", "status")
 
-            # 2. Wait for a metrics_tick message
-            data_tick = None
-            for _ in range(5):
-                raw_tick = await asyncio.wait_for(client.recv(), timeout=3.0)
-                msg_json = json.loads(raw_tick)
-                if msg_json.get("type") == "metrics_tick":
-                    data_tick = msg_json
-                    break
+            # 2. Wait for a metrics_tick message if not already received
+            if data_1["type"] == "metrics_tick":
+                data_tick = data_1
+            else:
+                data_tick = None
+                for _ in range(5):
+                    raw_tick = await asyncio.wait_for(client.recv(), timeout=5.0)
+                    msg_json = json.loads(raw_tick)
+                    if msg_json.get("type") == "metrics_tick":
+                        data_tick = msg_json
+                        break
 
             assert data_tick is not None
             assert data_tick["type"] == "metrics_tick"

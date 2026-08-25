@@ -111,11 +111,55 @@ class DiagnosisResultMessage(BaseModel):
 class TimelineQueryMessage(BaseModel):
     """Timeline query request from frontend."""
     type: Literal["timeline_query"] = "timeline_query"
-    start: str
-    end: str
+    start: str | None = None
+    end: str | None = None
+
+
+class TimelineSnapshotPayload(BaseModel):
+    """Single historical snapshot row in timeline result."""
+    id: int
+    timestamp: str
+    cpu_percent: float
+    cpu_temp_c: float | None = None
+    ram_percent: float
+    ram_available_mb: int
+    pagefile_percent: float | None = None
+    disk_percent_busy: float
+    disk_read_bps: int | None = None
+    disk_write_bps: int | None = None
+    gpu_percent: float | None = None
+    gpu_temp_c: float | None = None
+    gpu_vram_percent: float | None = None
+    net_sent_bps: int | None = None
+    net_recv_bps: int | None = None
+
+
+class TimelineDiagnosisPayload(BaseModel):
+    """Single historical diagnosis row in timeline result."""
+    id: int
+    snapshot_id: int
+    timestamp: str
+    label: str
+    rule_id: str
+    severity: str
+    health_score: int
+    contributing_processes: list[str] = Field(default_factory=list)
+    llm_summary: str | None = None
+    llm_root_cause: str | None = None
+    llm_fixes: list[dict[str, Any]] | None = None
+    llm_expected_improvement: str | None = None
+    llm_call_succeeded: bool = False
+
+
+class TimelineResultMessage(BaseModel):
+    """Timeline query response matching Section 10 contract."""
+    type: Literal["timeline_result"] = "timeline_result"
+    snapshots: list[TimelineSnapshotPayload]
+    diagnoses: list[TimelineDiagnosisPayload]
 
 
 class BenchmarkRequestMessage(BaseModel):
     """Benchmark execution request from frontend."""
     type: Literal["benchmark_request"] = "benchmark_request"
+
 

@@ -17,7 +17,7 @@ from websockets.asyncio.server import ServerConnection, serve
 
 from collectors import MetricsSnapshot, SystemCollector
 from config import settings
-from diagnostics import DiagnosticEngine
+from diagnostics import DiagnosticEngine, Diagnosis
 from server.schemas import (
     ErrorMessage,
     MetricsTickMessage,
@@ -25,12 +25,13 @@ from server.schemas import (
     ProcessTickItem,
     ServerStatusMessage,
 )
+from storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
 
 class AgentWebSocketServer:
-    """Async WebSocket server managing real-time metrics streaming and client RPCs."""
+    """Async WebSocket server managing real-time metrics streaming, SQLite persistence, and client RPCs."""
 
     def __init__(
         self,
@@ -38,6 +39,7 @@ class AgentWebSocketServer:
         port: int = settings.WEBSOCKET_PORT,
         polling_interval_ms: int = settings.POLLING_INTERVAL_MS,
         diagnostic_engine: DiagnosticEngine | None = None,
+        db: DatabaseManager | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -45,10 +47,12 @@ class AgentWebSocketServer:
         self.clients: dict[ServerConnection, asyncio.Lock] = {}
         self.system_collector = SystemCollector(top_processes_count=15)
         self.diagnostic_engine = diagnostic_engine or DiagnosticEngine()
+        self.db = db or DatabaseManager()
         self._running = False
         self._server = None
         self._broadcast_task: asyncio.Task | None = None
         self._last_snapshot: MetricsSnapshot | None = None
+        self._last_snapshot_id: int | None = None
 
     def snapshot_to_message(self, snapshot: MetricsSnapshot) -> MetricsTickMessage:
         """Convert a MetricsSnapshot into a validated MetricsTickMessage."""
@@ -101,7 +105,7 @@ class AgentWebSocketServer:
             logger.debug("Failed safe_send to %s: %s", getattr(websocket, "remote_address", "unknown"), e)
 
     async def _broadcast_loop(self) -> None:
-        """Background loop continuously polling hardware metrics and pushing to clients."""
+        """Background loop continuously polling hardware metrics, persisting to SQLite, and pushing to clients."""
         logger.info(
             "Metrics polling loop started (interval: %sms)",
             int(self.polling_interval_s * 1000),
@@ -113,6 +117,16 @@ class AgentWebSocketServer:
                     None, self.system_collector.collect_snapshot
                 )
                 self._last_snapshot = snapshot
+
+                # Persist snapshot and process breakdown to SQLite
+                def _persist_tick(snap: MetricsSnapshot) -> int:
+                    s_id = self.db.save_snapshot(snap)
+                    if snap.top_processes:
+                        self.db.save_process_snapshots(s_id, snap.top_processes)
+                    return s_id
+
+                snapshot_id = await loop.run_in_executor(None, _persist_tick, snapshot)
+                self._last_snapshot_id = snapshot_id
 
                 msg = self.snapshot_to_message(snapshot)
                 payload = msg.model_dump_json()
@@ -157,10 +171,10 @@ class AgentWebSocketServer:
             await self.safe_send(websocket, pong.model_dump_json())
 
         elif msg_type == "diagnose_request":
-            # Real deterministic rule-based evaluation (Phase 3)
+            # Real deterministic rule-based evaluation (Phase 3 & Phase 4 persistence)
+            loop = asyncio.get_running_loop()
             current_snapshot = self._last_snapshot
             if current_snapshot is None:
-                loop = asyncio.get_running_loop()
                 current_snapshot = await loop.run_in_executor(
                     None, self.system_collector.collect_snapshot
                 )
@@ -175,15 +189,33 @@ class AgentWebSocketServer:
                 diagnosis.health_score,
                 diagnosis.contributing_processes,
             )
+
+            # Persist diagnosis in SQLite linked to snapshot
+            snap_id = self._last_snapshot_id
+            if snap_id is None:
+                snap_id = await loop.run_in_executor(None, self.db.save_snapshot, current_snapshot)
+                self._last_snapshot_id = snap_id
+
+            diag_id = await loop.run_in_executor(
+                None, self.db.save_diagnosis, snap_id, diagnosis, diagnosis.timestamp
+            )
+            logger.info("Persisted diagnosis record id: %d (snapshot_id: %d)", diag_id, snap_id)
+
             resp = diagnosis.to_diagnosis_response(llm_call_succeeded=False)
             await self.safe_send(websocket, json.dumps(resp))
 
         elif msg_type == "timeline_query":
-            # Phase 4 placeholder
+            # Query SQLite for historical snapshots and diagnoses (Phase 4)
+            start_ts = data.get("start")
+            end_ts = data.get("end")
+            loop = asyncio.get_running_loop()
+            history_data = await loop.run_in_executor(
+                None, self.db.query_timeline, start_ts, end_ts
+            )
             resp = {
                 "type": "timeline_result",
-                "snapshots": [],
-                "diagnoses": [],
+                "snapshots": history_data["snapshots"],
+                "diagnoses": history_data["diagnoses"],
             }
             await self.safe_send(websocket, json.dumps(resp))
 
@@ -260,6 +292,8 @@ class AgentWebSocketServer:
         if self._server:
             self._server.close()
             await self._server.wait_closed()
+
+        self.db.close()
         logger.info("Agent WebSocket server stopped.")
 
 
