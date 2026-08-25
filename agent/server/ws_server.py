@@ -17,6 +17,7 @@ from websockets.asyncio.server import ServerConnection, serve
 
 from collectors import MetricsSnapshot, SystemCollector
 from config import settings
+from diagnostics import DiagnosticEngine
 from server.schemas import (
     ErrorMessage,
     MetricsTickMessage,
@@ -36,12 +37,14 @@ class AgentWebSocketServer:
         host: str = settings.WEBSOCKET_HOST,
         port: int = settings.WEBSOCKET_PORT,
         polling_interval_ms: int = settings.POLLING_INTERVAL_MS,
+        diagnostic_engine: DiagnosticEngine | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.polling_interval_s = max(0.2, polling_interval_ms / 1000.0)
-        self.clients: set[ServerConnection] = set()
+        self.clients: dict[ServerConnection, asyncio.Lock] = {}
         self.system_collector = SystemCollector(top_processes_count=15)
+        self.diagnostic_engine = diagnostic_engine or DiagnosticEngine()
         self._running = False
         self._server = None
         self._broadcast_task: asyncio.Task | None = None
@@ -86,6 +89,17 @@ class AgentWebSocketServer:
             top_process_io_percent=snapshot.top_process_io_percent,
         )
 
+    async def safe_send(self, websocket: ServerConnection, message: str) -> None:
+        """Send a string payload to a websocket client safely using its dedicated lock."""
+        lock = self.clients.get(websocket)
+        if lock is None:
+            return
+        try:
+            async with lock:
+                await websocket.send(message)
+        except Exception as e:
+            logger.debug("Failed safe_send to %s: %s", getattr(websocket, "remote_address", "unknown"), e)
+
     async def _broadcast_loop(self) -> None:
         """Background loop continuously polling hardware metrics and pushing to clients."""
         logger.info(
@@ -94,7 +108,6 @@ class AgentWebSocketServer:
         )
         while self._running:
             try:
-                # Capture snapshot synchronously in executor if desired, or directly
                 loop = asyncio.get_running_loop()
                 snapshot: MetricsSnapshot = await loop.run_in_executor(
                     None, self.system_collector.collect_snapshot
@@ -105,16 +118,21 @@ class AgentWebSocketServer:
                 payload = msg.model_dump_json()
 
                 if self.clients:
-                    # Broadcast payload to all active clients
                     websockets_to_remove = set()
-                    for ws in list(self.clients):
+                    for ws, lock in list(self.clients.items()):
                         try:
-                            await ws.send(payload)
+                            async with lock:
+                                await ws.send(payload)
                         except Exception as e:
-                            logger.debug("Failed sending tick to client %s: %s", ws.remote_address, e)
+                            logger.debug(
+                                "Failed sending tick to client %s: %s",
+                                getattr(ws, "remote_address", "unknown"),
+                                e,
+                            )
                             websockets_to_remove.add(ws)
 
-                    self.clients.difference_update(websockets_to_remove)
+                    for ws in websockets_to_remove:
+                        self.clients.pop(ws, None)
 
             except asyncio.CancelledError:
                 break
@@ -130,34 +148,35 @@ class AgentWebSocketServer:
             msg_type = data.get("type")
         except json.JSONDecodeError:
             err = ErrorMessage(message="Invalid JSON payload", code="INVALID_JSON")
-            await websocket.send(err.model_dump_json())
+            await self.safe_send(websocket, err.model_dump_json())
             return
 
         if msg_type == "ping":
             now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             pong = PongMessage(timestamp=now_iso)
-            await websocket.send(pong.model_dump_json())
+            await self.safe_send(websocket, pong.model_dump_json())
 
         elif msg_type == "diagnose_request":
-            # Phase 2 status acknowledgment (Phase 3 will wire in diagnostic engine)
-            resp = {
-                "type": "diagnosis_result",
-                "diagnosis": {
-                    "label": "nominal",
-                    "rule_id": "phase_2_live_monitoring",
-                    "severity": "none",
-                    "health_score": 100,
-                    "contributing_processes": [],
-                },
-                "explanation": {
-                    "summary": "Phase 2 Live Telemetry is operational. Diagnostic engine will be active in Phase 3.",
-                    "root_cause": "System monitor active.",
-                    "fixes": [],
-                    "expected_improvement": "All systems operating normally.",
-                },
-                "llm_call_succeeded": False,
-            }
-            await websocket.send(json.dumps(resp))
+            # Real deterministic rule-based evaluation (Phase 3)
+            current_snapshot = self._last_snapshot
+            if current_snapshot is None:
+                loop = asyncio.get_running_loop()
+                current_snapshot = await loop.run_in_executor(
+                    None, self.system_collector.collect_snapshot
+                )
+                self._last_snapshot = current_snapshot
+
+            diagnosis = self.diagnostic_engine.evaluate(current_snapshot)
+            logger.info(
+                "Diagnostic engine evaluated snapshot -> label: %s, rule: %s, severity: %s, health_score: %d, processes: %s",
+                diagnosis.label,
+                diagnosis.rule_id,
+                diagnosis.severity,
+                diagnosis.health_score,
+                diagnosis.contributing_processes,
+            )
+            resp = diagnosis.to_diagnosis_response(llm_call_succeeded=False)
+            await self.safe_send(websocket, json.dumps(resp))
 
         elif msg_type == "timeline_query":
             # Phase 4 placeholder
@@ -166,7 +185,7 @@ class AgentWebSocketServer:
                 "snapshots": [],
                 "diagnoses": [],
             }
-            await websocket.send(json.dumps(resp))
+            await self.safe_send(websocket, json.dumps(resp))
 
         elif msg_type == "benchmark_request":
             # Phase 6 placeholder
@@ -175,7 +194,7 @@ class AgentWebSocketServer:
                 "score": 0,
                 "breakdown": {"cpu": 0, "disk": 0, "gpu": 0},
             }
-            await websocket.send(json.dumps(resp))
+            await self.safe_send(websocket, json.dumps(resp))
 
         else:
             logger.warning("Unknown message type received: %s", msg_type)
@@ -183,26 +202,27 @@ class AgentWebSocketServer:
                 message=f"Unknown message type: '{msg_type}'",
                 code="UNKNOWN_MESSAGE_TYPE",
             )
-            await websocket.send(err.model_dump_json())
+            await self.safe_send(websocket, err.model_dump_json())
 
     async def _connection_handler(self, websocket: ServerConnection) -> None:
         """Handle lifecycle of a single WebSocket client connection."""
-        self.clients.add(websocket)
+        lock = asyncio.Lock()
+        self.clients[websocket] = lock
         client_addr = getattr(websocket, "remote_address", "unknown")
         logger.info("Client connected: %s (Total clients: %d)", client_addr, len(self.clients))
 
-        # Send immediate initial state if available
         try:
+            # Send immediate initial state if available
             if self._last_snapshot is not None:
                 initial_msg = self.snapshot_to_message(self._last_snapshot)
-                await websocket.send(initial_msg.model_dump_json())
+                await self.safe_send(websocket, initial_msg.model_dump_json())
             else:
                 status_msg = ServerStatusMessage(
                     status="connected",
                     message="Connected to PC Performance Doctor Agent",
-                    phase=2,
+                    phase=3,
                 )
-                await websocket.send(status_msg.model_dump_json())
+                await self.safe_send(websocket, status_msg.model_dump_json())
 
             async for raw_msg in websocket:
                 await self._handle_message(websocket, str(raw_msg))
@@ -212,7 +232,7 @@ class AgentWebSocketServer:
         except Exception as e:
             logger.error("Error handling client %s: %s", client_addr, e)
         finally:
-            self.clients.discard(websocket)
+            self.clients.pop(websocket, None)
             logger.info("Client disconnected: %s (Remaining: %d)", client_addr, len(self.clients))
 
     async def start(self) -> None:

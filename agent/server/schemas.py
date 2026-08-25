@@ -76,6 +76,38 @@ class DiagnoseRequestMessage(BaseModel):
     type: Literal["diagnose_request"] = "diagnose_request"
 
 
+class DiagnosisPayload(BaseModel):
+    """Structured diagnosis sub-object from the rule engine."""
+    label: str
+    rule_id: str
+    severity: Literal["none", "low", "medium", "high"]
+    health_score: int
+    contributing_processes: list[str] = Field(default_factory=list)
+
+
+class DiagnosisFixItem(BaseModel):
+    """Fix recommendation item."""
+    action: str
+    difficulty: Literal["easy", "medium", "advanced"] = "easy"
+    impact: Literal["low", "medium", "high"] = "medium"
+
+
+class DiagnosisExplanationPayload(BaseModel):
+    """Explanation and fix container."""
+    summary: str
+    root_cause: str
+    fixes: list[DiagnosisFixItem] = Field(default_factory=list)
+    expected_improvement: str
+
+
+class DiagnosisResultMessage(BaseModel):
+    """Diagnosis result message pushed to frontend matching Section 10 contract."""
+    type: Literal["diagnosis_result"] = "diagnosis_result"
+    diagnosis: DiagnosisPayload
+    explanation: DiagnosisExplanationPayload | None = None
+    llm_call_succeeded: bool = False
+
+
 class TimelineQueryMessage(BaseModel):
     """Timeline query request from frontend."""
     type: Literal["timeline_query"] = "timeline_query"
@@ -86,3 +118,4 @@ class TimelineQueryMessage(BaseModel):
 class BenchmarkRequestMessage(BaseModel):
     """Benchmark execution request from frontend."""
     type: Literal["benchmark_request"] = "benchmark_request"
+

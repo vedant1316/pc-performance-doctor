@@ -1,0 +1,115 @@
+# PC Performance Doctor — Declarative Diagnostic Rules
+# Human-readable rule definitions evaluated sequentially by engine.py.
+# Rules are ordered by priority / severity penalty (highest penalty evaluated first).
+# The nominal rule serves as the fallback when no bottleneck condition fires.
+
+rules:
+  - id: memory_pressure
+    description: >
+      RAM is critically high, the pagefile is actively being used, and there's
+      very little RAM actually available — the system is swapping to disk.
+    conditions:
+      - metric: ram_percent
+        operator: ">"
+        value: 90
+      - metric: pagefile_percent
+        operator: ">"
+        value: 50
+        label: HIGH
+      - metric: ram_available_mb
+        operator: "<"
+        value: 500
+        label: LOW
+    output:
+      label: memory_pressure
+      severity: high
+      health_score_penalty: 40
+
+  - id: disk_bottleneck
+    description: >
+      Disk is fully saturated and a single process accounts for most of the I/O —
+      that process is the bottleneck, not the disk hardware itself.
+    conditions:
+      - metric: disk_percent_busy
+        operator: "=="
+        value: 100
+      - metric: top_process_io_percent
+        operator: ">"
+        value: 70
+    output:
+      label: disk_bottleneck
+      severity: high
+      health_score_penalty: 35
+
+  - id: thermal_throttling
+    description: >
+      CPU usage is very high, one process dominates that usage, and CPU
+      temperature is elevated — likely throttling rather than a workload issue.
+    conditions:
+      - metric: cpu_percent
+        operator: ">"
+        value: 90
+      - metric: top_process_cpu_percent
+        operator: ">"
+        value: 70
+      - metric: cpu_temp_c
+        operator: ">"
+        value: 85
+        label: HIGH
+    output:
+      label: thermal_throttling
+      severity: high
+      health_score_penalty: 45
+
+  - id: network_saturation
+    description: >
+      Network throughput is near the detected link capacity, degrading
+      responsiveness for network-dependent apps.
+    conditions:
+      - metric: net_recv_bps
+        operator: ">"
+        value: 0.9   # fraction of estimated link capacity
+        relative: true
+    output:
+      label: network_saturation
+      severity: medium
+      health_score_penalty: 20
+
+  - id: gpu_bound
+    description: >
+      GPU usage is maxed while CPU is comfortable — workload is GPU-limited,
+      not a general system slowdown.
+    conditions:
+      - metric: gpu_percent
+        operator: ">"
+        value: 95
+      - metric: cpu_percent
+        operator: "<"
+        value: 60
+    output:
+      label: gpu_bound
+      severity: low
+      health_score_penalty: 10
+
+  - id: background_process_sprawl
+    description: >
+      No single resource is critically high, but a large number of processes
+      are each consuming a small-to-moderate share — death by a thousand cuts.
+    conditions:
+      - metric: process_count_above_threshold
+        operator: ">"
+        value: 15
+        threshold_metric: cpu_percent
+        threshold_value: 5
+    output:
+      label: background_process_sprawl
+      severity: medium
+      health_score_penalty: 15
+
+  - id: nominal
+    description: All metrics within healthy ranges — no bottleneck detected.
+    conditions: []   # fallback / default rule, evaluated last
+    output:
+      label: nominal
+      severity: none
+      health_score_penalty: 0
