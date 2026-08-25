@@ -1,0 +1,27 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+.env.*
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Tauri / Rust
+src-tauri/target/
+
+# Data
+data/*.db
+data/*.db-journal
+
+# OS
+.DS_Store
+Thumbs.db
