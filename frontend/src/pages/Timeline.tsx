@@ -14,6 +14,7 @@ import {
   Flame,
   Gamepad2,
   Search,
+  Sparkles,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -522,10 +523,22 @@ export const Timeline: React.FC<TimelineProps> = ({
                         Rule: {diag.rule_id}
                       </span>
                       {getSeverityBadge(diag.severity)}
+                      {diag.llm_call_succeeded && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          AI Explained
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-300">
                       {diag.llm_summary || `Rule engine detected bottleneck: ${diag.label}`}
                     </p>
+                    {diag.llm_fixes && diag.llm_fixes.length > 0 && (
+                      <div className="text-[11px] text-slate-400 mt-1 font-sans">
+                        <span className="text-indigo-300 font-semibold">{diag.llm_fixes.length} fixes recommended: </span>
+                        {diag.llm_fixes.map((f) => f.action).join(' • ')}
+                      </div>
+                    )}
                     {diag.contributing_processes && diag.contributing_processes.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
                         <span className="text-[10px] text-slate-500 font-mono">Processes:</span>

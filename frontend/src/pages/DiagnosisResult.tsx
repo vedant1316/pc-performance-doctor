@@ -14,8 +14,12 @@ import {
   Network,
   Gamepad2,
   Check,
+  Sparkles,
+  Wrench,
+  TrendingUp,
+  AlertCircle,
 } from 'lucide-react';
-import { DiagnosisResult as DiagnosisResultType } from '../types/telemetry';
+import { DiagnosisResult as DiagnosisResultType, DiagnosisFix } from '../types/telemetry';
 
 interface DiagnosisResultProps {
   diagnosis: DiagnosisResultType | null;
@@ -74,6 +78,54 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
     }
   };
 
+  const getDifficultyBadge = (difficulty: string) => {
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-800/80">
+            Easy
+          </span>
+        );
+      case 'advanced':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-purple-950/80 text-purple-300 border border-purple-800/80">
+            Advanced
+          </span>
+        );
+      case 'medium':
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-800/80">
+            Medium
+          </span>
+        );
+    }
+  };
+
+  const getImpactBadge = (impact: string) => {
+    switch (impact.toLowerCase()) {
+      case 'high':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-950/80 text-rose-300 border border-rose-800/80">
+            High Impact
+          </span>
+        );
+      case 'low':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
+            Low Impact
+          </span>
+        );
+      case 'medium':
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-800/80">
+            Medium Impact
+          </span>
+        );
+    }
+  };
+
   const getRuleIcon = (ruleId: string) => {
     switch (ruleId) {
       case 'thermal_throttling':
@@ -109,6 +161,10 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
       ? 'border-amber-500/30'
       : 'border-rose-500/30';
 
+  const isLlmSucceeded = Boolean(diagnosis?.llm_call_succeeded);
+  const explanation = diagnosis?.explanation;
+  const fixes: DiagnosisFix[] = explanation?.fixes || [];
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Navigation Top Bar */}
@@ -135,7 +191,7 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
 
       {diagnosis ? (
         <div className="space-y-6">
-          {/* Main Hero Card */}
+          {/* Main Hero Card - Deterministic Rule Engine Result */}
           <div
             className={`glass-card rounded-2xl p-6 sm:p-8 border ${scoreBorderColor} relative overflow-hidden`}
           >
@@ -151,7 +207,7 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
                 <div>
                   <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
                     <span className="font-mono text-xs px-2.5 py-0.5 rounded-md bg-indigo-950/80 text-indigo-300 border border-indigo-800/80">
-                      Rule: {diagnosis.diagnosis.rule_id}
+                      Rule ID: {diagnosis.diagnosis.rule_id}
                     </span>
                     {getSeverityBadge(diagnosis.diagnosis.severity)}
                   </div>
@@ -159,8 +215,7 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
                     {diagnosis.diagnosis.label.replace(/_/g, ' ')}
                   </h1>
                   <p className="text-xs text-slate-400 mt-1 max-w-xl">
-                    Evaluated deterministically from live hardware telemetry against{' '}
-                    <code className="text-indigo-300">rules.yaml</code>.
+                    Evaluated deterministically by local diagnostic engine from live hardware telemetry.
                   </p>
                 </div>
               </div>
@@ -187,17 +242,142 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
               </div>
             </div>
 
-            {/* Diagnostic Summary Block */}
+            {/* Deterministic Diagnostic Finding */}
             <div className="mt-6 pt-6 border-t border-slate-800/80">
-              <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">
-                Diagnostic Finding
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400">
+                  Diagnostic Evaluation Summary
+                </h3>
+                <span className="text-[11px] font-mono text-slate-500">
+                  Authority: Rule Engine
+                </span>
+              </div>
               <p className="text-sm text-slate-200 leading-relaxed font-sans bg-slate-900/60 border border-slate-800/60 rounded-xl p-4">
-                {diagnosis.explanation?.summary ||
+                {explanation?.summary ||
                   'All telemetry metrics evaluated against hardware threshold rules.'}
               </p>
             </div>
           </div>
+
+          {/* AI Explanation Layer Section */}
+          {isLlmSucceeded && explanation ? (
+            <div className="space-y-6">
+              {/* AI Deep Explanation & Root Cause Card */}
+              <div className="glass-card rounded-2xl p-6 border border-indigo-900/60 relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-900/95 to-indigo-950/40">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                    <Sparkles className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">AI Plain-English Analysis</h3>
+                    <p className="text-[11px] text-slate-400">
+                      Contextual writeup translated from the verified deterministic diagnosis
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
+                    <h4 className="text-xs font-semibold text-indigo-300 uppercase tracking-wider font-mono">
+                      Executive Summary
+                    </h4>
+                    <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                      {explanation.summary}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
+                    <h4 className="text-xs font-semibold text-cyan-300 uppercase tracking-wider font-mono">
+                      Root Cause Mechanism
+                    </h4>
+                    <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                      {explanation.root_cause}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actionable Remediation Fixes */}
+              <div className="glass-card rounded-2xl p-6 border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <Wrench className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Recommended Fixes</h3>
+                      <p className="text-[11px] text-slate-400">
+                        Actionable remediation steps ranked by ease and expected impact
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                    {fixes.length} {fixes.length === 1 ? 'Action' : 'Actions'}
+                  </span>
+                </div>
+
+                {fixes.length > 0 ? (
+                  <div className="space-y-3">
+                    {fixes.map((fix, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/40 transition-all group"
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-indigo-300 font-mono text-xs font-bold border border-slate-700 flex-shrink-0 mt-0.5 sm:mt-0">
+                            {idx + 1}
+                          </span>
+                          <span className="text-xs text-slate-200 leading-relaxed font-medium">
+                            {fix.action}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
+                          {getDifficultyBadge(fix.difficulty)}
+                          {getImpactBadge(fix.impact)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400">
+                    No immediate remediation actions required for this system state.
+                  </div>
+                )}
+
+                {/* Expected Improvement Callout */}
+                {explanation.expected_improvement && (
+                  <div className="mt-4 p-4 rounded-xl bg-indigo-950/30 border border-indigo-800/40 flex items-start gap-3">
+                    <TrendingUp className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h5 className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider font-mono">
+                        Expected Improvement
+                      </h5>
+                      <p className="text-xs text-slate-300 mt-0.5 leading-relaxed font-sans">
+                        {explanation.expected_improvement}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Fallback Alert Banner when AI explanation is unavailable */
+            <div className="glass-card rounded-2xl p-5 border border-amber-900/50 bg-amber-950/20">
+              <div className="flex items-start gap-3.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex-shrink-0 mt-0.5">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-amber-300">
+                    AI explanation unavailable — showing rules-engine diagnosis only.
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-normal">
+                    The deterministic rule engine calculated the verified diagnosis above. To enable AI-powered remediation writeups, configure your OpenAI-compatible API key (<code className="text-amber-200">LLM_API_KEY</code>) in the agent environment.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Contributing Processes Section */}
           <div className="glass-card rounded-2xl p-6 border border-slate-800">
@@ -248,14 +428,14 @@ export const DiagnosisResult: React.FC<DiagnosisResultProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-bold text-slate-200">
-                    Deterministic Architecture Verification
+                    Deterministic Diagnostic Engine + AI Explanation Layer
                   </h4>
                   <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                    Phase 3 Active
+                    Phase 5 Active
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 leading-normal">
-                  The bottleneck, root cause, severity, and health score shown above were calculated directly by the local rule engine without an AI model. In Phase 5, an optional AI layer will translate this verified diagnosis into human-friendly remediation actions.
+                  The bottleneck, root cause, severity, and health score are calculated deterministically by local algorithms without an AI model. The AI layer translates this verified diagnosis into human-friendly remediation actions.
                 </p>
               </div>
             </div>

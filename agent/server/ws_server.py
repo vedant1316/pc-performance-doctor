@@ -18,6 +18,7 @@ from websockets.asyncio.server import ServerConnection, serve
 from collectors import MetricsSnapshot, SystemCollector
 from config import settings
 from diagnostics import DiagnosticEngine, Diagnosis
+from ai import AIExplainer, ExplanationResult, FALLBACK_NOTE
 from server.schemas import (
     ErrorMessage,
     MetricsTickMessage,
@@ -40,6 +41,7 @@ class AgentWebSocketServer:
         polling_interval_ms: int = settings.POLLING_INTERVAL_MS,
         diagnostic_engine: DiagnosticEngine | None = None,
         db: DatabaseManager | None = None,
+        ai_explainer: AIExplainer | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -48,6 +50,7 @@ class AgentWebSocketServer:
         self.system_collector = SystemCollector(top_processes_count=15)
         self.diagnostic_engine = diagnostic_engine or DiagnosticEngine()
         self.db = db or DatabaseManager()
+        self.ai_explainer = ai_explainer or AIExplainer()
         self._running = False
         self._server = None
         self._broadcast_task: asyncio.Task | None = None
@@ -199,10 +202,14 @@ class AgentWebSocketServer:
             diag_id = await loop.run_in_executor(
                 None, self.db.save_diagnosis, snap_id, diagnosis, diagnosis.timestamp
             )
-            logger.info("Persisted diagnosis record id: %d (snapshot_id: %d)", diag_id, snap_id)
+            logger.info("Persisted initial diagnosis record id: %d (snapshot_id: %d)", diag_id, snap_id)
 
+            # Step 1: Immediately push deterministic diagnosis to UI (no blocking on LLM)
             resp = diagnosis.to_diagnosis_response(llm_call_succeeded=False)
             await self.safe_send(websocket, json.dumps(resp))
+
+            # Step 2: Asynchronously invoke AI explanation layer and enrich UI & database
+            asyncio.create_task(self._process_ai_explanation(websocket, diag_id, diagnosis))
 
         elif msg_type == "timeline_query":
             # Query SQLite for historical snapshots and diagnoses (Phase 4)
@@ -235,6 +242,62 @@ class AgentWebSocketServer:
                 code="UNKNOWN_MESSAGE_TYPE",
             )
             await self.safe_send(websocket, err.model_dump_json())
+
+    async def _process_ai_explanation(
+        self, websocket: ServerConnection, diag_id: int, diagnosis: Diagnosis
+    ) -> None:
+        """Background worker invoking AI Explainer, updating SQLite, and pushing result to frontend."""
+        try:
+            loop = asyncio.get_running_loop()
+            ai_result: ExplanationResult = await loop.run_in_executor(
+                None, self.ai_explainer.explain, diagnosis
+            )
+
+            if ai_result.succeeded and ai_result.explanation:
+                # Update SQLite with full LLM findings
+                await loop.run_in_executor(
+                    None,
+                    self.db.update_diagnosis_explanation,
+                    diag_id,
+                    ai_result.explanation,
+                    True,
+                )
+                logger.info(
+                    "AI explanation successfully generated for diagnosis %d (%s)",
+                    diag_id,
+                    diagnosis.label,
+                )
+                enriched_resp = diagnosis.to_diagnosis_response(
+                    explanation=ai_result.explanation,
+                    llm_call_succeeded=True,
+                )
+                await self.safe_send(websocket, json.dumps(enriched_resp))
+            else:
+                # Fallback: update SQLite with failure status and push fallback message
+                fallback_expl = ai_result.get_fallback_explanation(diagnosis)
+                await loop.run_in_executor(
+                    None,
+                    self.db.update_diagnosis_explanation,
+                    diag_id,
+                    None,
+                    False,
+                )
+                logger.info(
+                    "AI explanation unavailable for diagnosis %d (%s): %s",
+                    diag_id,
+                    diagnosis.label,
+                    ai_result.error_message,
+                )
+                fallback_resp = diagnosis.to_diagnosis_response(
+                    explanation=fallback_expl,
+                    llm_call_succeeded=False,
+                )
+                await self.safe_send(websocket, json.dumps(fallback_resp))
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error("Error in _process_ai_explanation: %s", e, exc_info=True)
 
     async def _connection_handler(self, websocket: ServerConnection) -> None:
         """Handle lifecycle of a single WebSocket client connection."""

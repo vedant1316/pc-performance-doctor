@@ -300,6 +300,59 @@ class DatabaseManager:
                 )
                 return cur.lastrowid
 
+    def update_diagnosis_explanation(
+        self,
+        diagnosis_id: int,
+        explanation: dict[str, Any] | None,
+        llm_call_succeeded: bool = True,
+    ) -> bool:
+        """Update a diagnosis record with the AI explanation and success status.
+
+        Args:
+            diagnosis_id: The primary key of the diagnosis record.
+            explanation: The validated explanation dictionary (or None).
+            llm_call_succeeded: Whether the LLM call succeeded.
+
+        Returns:
+            bool: True if row was updated, False otherwise.
+        """
+        llm_summary = explanation.get("summary") if explanation else None
+        llm_root_cause = explanation.get("root_cause") if explanation else None
+        llm_fixes = (
+            json.dumps(explanation.get("fixes"))
+            if explanation and "fixes" in explanation
+            else None
+        )
+        llm_expected_improvement = (
+            explanation.get("expected_improvement") if explanation else None
+        )
+        succeeded_int = 1 if llm_call_succeeded else 0
+
+        sql = """
+        UPDATE diagnoses
+        SET llm_summary = ?,
+            llm_root_cause = ?,
+            llm_fixes = ?,
+            llm_expected_improvement = ?,
+            llm_call_succeeded = ?
+        WHERE id = ?;
+        """
+        with self._lock:
+            conn = self._get_connection()
+            with conn:
+                cur = conn.execute(
+                    sql,
+                    (
+                        llm_summary,
+                        llm_root_cause,
+                        llm_fixes,
+                        llm_expected_improvement,
+                        succeeded_int,
+                        diagnosis_id,
+                    ),
+                )
+                return cur.rowcount > 0
+
     def query_timeline(
         self,
         start_iso: str | None = None,
