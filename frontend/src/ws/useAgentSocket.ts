@@ -49,15 +49,36 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
   const reconnectAttemptsRef = useRef<number>(0);
   const isManuallyClosedRef = useRef<boolean>(false);
 
-  const connect = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
+  const cleanupSocket = (ws: WebSocket | null) => {
+    if (!ws) return;
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.onclose = null;
+    try {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    } catch {
+      // Ignore close errors during cleanup
     }
+  };
 
+  const connect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+
+    // Clean up any existing socket before opening a new one
+    if (socketRef.current) {
+      cleanupSocket(socketRef.current);
+      socketRef.current = null;
     }
 
     setStatus((prev) => (prev === 'connected' ? 'reconnecting' : 'connecting'));
@@ -68,13 +89,15 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
       socketRef.current = ws;
 
       ws.onopen = () => {
+        if (socketRef.current !== ws) return;
+
         setStatus('connected');
         reconnectAttemptsRef.current = 0;
 
         // Start ping heartbeat
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = window.setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
+          if (socketRef.current === ws && ws.readyState === WebSocket.OPEN) {
             pingSentTimeRef.current = performance.now();
             ws.send(JSON.stringify({ type: 'ping' }));
           }
@@ -82,6 +105,8 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
       };
 
       ws.onmessage = (event) => {
+        if (socketRef.current !== ws) return;
+
         try {
           const data = JSON.parse(event.data);
 
@@ -140,15 +165,20 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
         }
       };
 
-      ws.onerror = (err) => {
-        console.warn('WebSocket encountered error:', err);
+      ws.onerror = () => {
+        if (socketRef.current !== ws) return;
+        // Do not immediately close or force disconnected here; ws.onclose handles state transitions cleanly
       };
 
       ws.onclose = () => {
+        if (socketRef.current !== ws) return;
+
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
           pingIntervalRef.current = null;
         }
+
+        socketRef.current = null;
 
         if (!isManuallyClosedRef.current) {
           setStatus('reconnecting');
@@ -199,13 +229,23 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
   }, [connect]);
 
   useEffect(() => {
+    isManuallyClosedRef.current = false;
     connect();
 
     return () => {
       isManuallyClosedRef.current = true;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      if (socketRef.current) socketRef.current.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
+      if (socketRef.current) {
+        cleanupSocket(socketRef.current);
+        socketRef.current = null;
+      }
     };
   }, [connect]);
 
@@ -227,5 +267,3 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
     reconnect,
   };
 }
-
-
