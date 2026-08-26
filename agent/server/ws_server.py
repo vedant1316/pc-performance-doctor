@@ -395,7 +395,7 @@ class AgentWebSocketServer:
             else:
                 status_msg = ServerStatusMessage(
                     status="connected",
-                    message="Connected to PC Performance Doctor Agent",
+                    message="Connected to CoreSight Agent",
                     phase=3,
                 )
                 await self.safe_send(websocket, status_msg.model_dump_json())

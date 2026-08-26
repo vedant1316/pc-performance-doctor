@@ -141,7 +141,7 @@ class HealthReportPDFGenerator:
         hostname = socket.gethostname()
         os_info = f"{platform.system()} {platform.release()} ({platform.version()})"
 
-        elements.append(Paragraph("PC PERFORMANCE DOCTOR", self.title_style))
+        elements.append(Paragraph("CORESIGHT HEALTH REPORT", self.title_style))
         elements.append(
             Paragraph(
                 f"SYSTEM HEALTH &amp; DIAGNOSTIC REPORT &bull; Generated: {now_utc} &bull; Host: {self._sanitize_string(hostname)}",
@@ -405,7 +405,7 @@ class HealthReportPDFGenerator:
 
         # Footer note
         footer_text = (
-            "<font size=7 color='#94a3b8'>PC Performance Doctor &bull; Local Desktop Architecture &bull; "
+            "<font size=7 color='#94a3b8'>CoreSight &bull; Local Desktop Architecture &bull; "
             "Confidential &bull; Contains no credentials or secrets.</font>"
         )
         elements.append(Paragraph(footer_text, self.body_style))

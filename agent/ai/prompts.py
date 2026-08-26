@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-SYSTEM_PROMPT = """You are the explanation layer of PC Performance Doctor. A rule-based diagnostic
+SYSTEM_PROMPT = """You are the explanation layer of CoreSight. A rule-based diagnostic
 engine has ALREADY determined the root cause of a performance issue on this
 Windows PC. You are NOT diagnosing anything yourself — you must never guess,
 override, or second-guess the provided diagnosis label. Your only job is to:

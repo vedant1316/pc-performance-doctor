@@ -24,7 +24,7 @@ def main() -> None:
     """Run the PC Performance Doctor agent process."""
     setup_logging()
     logger = logging.getLogger("agent.main")
-    logger.info("Starting PC Performance Doctor Agent...")
+    logger.info("Starting CoreSight Agent...")
     logger.info("WebSocket Host: %s, Port: %d", settings.WEBSOCKET_HOST, settings.WEBSOCKET_PORT)
     logger.info("Polling Interval: %d ms", settings.POLLING_INTERVAL_MS)
 

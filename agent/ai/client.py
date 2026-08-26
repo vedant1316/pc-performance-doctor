@@ -129,7 +129,7 @@ class OpenAICompatibleClient:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "PC-Performance-Doctor/1.0",
+            "User-Agent": "CoreSight/1.0",
         }
         if self.api_key and self.api_key.strip():
             headers["Authorization"] = f"Bearer {self.api_key.strip()}"
