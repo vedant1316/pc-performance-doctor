@@ -115,9 +115,9 @@ export const MetricGauge: React.FC<MetricGaugeProps> = ({
       {badges.length > 0 && (
         <div className="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-1.5 text-[11px]">
           {badges.map((b, idx) => (
-            <div key={idx} className="flex justify-between items-center bg-slate-50 px-2 py-1 rounded border border-slate-100">
-              <span className="text-slate-500 truncate font-normal">{b.label}</span>
-              <span className="text-slate-800 font-medium ml-1 truncate tabular-nums">
+            <div key={idx} className="flex flex-col bg-slate-50 px-2 py-1.5 rounded border border-slate-100 gap-0.5">
+              <span className="text-slate-400 font-normal leading-none">{b.label}</span>
+              <span className="text-slate-800 font-medium tabular-nums leading-tight">
                 {b.value !== null && b.value !== undefined ? b.value : '--'}
               </span>
             </div>
