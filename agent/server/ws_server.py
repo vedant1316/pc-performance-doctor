@@ -7,20 +7,26 @@ client requests according to the reference protocol.
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import datetime, timezone
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
 
+from benchmark import BenchmarkRunner
 from collectors import MetricsSnapshot, SystemCollector
 from config import settings
 from diagnostics import DiagnosticEngine, Diagnosis
 from ai import AIExplainer, ExplanationResult, FALLBACK_NOTE
+from report import HealthReportPDFGenerator, generate_health_report_pdf
 from server.schemas import (
+    BenchmarkResultMessage,
     ErrorMessage,
+    ExportPdfResultMessage,
     MetricsTickMessage,
     PongMessage,
     ProcessTickItem,
@@ -42,6 +48,7 @@ class AgentWebSocketServer:
         diagnostic_engine: DiagnosticEngine | None = None,
         db: DatabaseManager | None = None,
         ai_explainer: AIExplainer | None = None,
+        benchmark_runner: BenchmarkRunner | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -51,11 +58,17 @@ class AgentWebSocketServer:
         self.diagnostic_engine = diagnostic_engine or DiagnosticEngine()
         self.db = db or DatabaseManager()
         self.ai_explainer = ai_explainer or AIExplainer()
+        self.benchmark_runner = benchmark_runner or BenchmarkRunner()
+        self.pdf_generator = HealthReportPDFGenerator()
         self._running = False
         self._server = None
         self._broadcast_task: asyncio.Task | None = None
         self._last_snapshot: MetricsSnapshot | None = None
         self._last_snapshot_id: int | None = None
+        self._last_diagnosis: Diagnosis | None = None
+        self._last_explanation: dict[str, Any] | None = None
+        self._last_benchmark_result: dict[str, Any] | None = None
+
 
     def snapshot_to_message(self, snapshot: MetricsSnapshot) -> MetricsTickMessage:
         """Convert a MetricsSnapshot into a validated MetricsTickMessage."""
@@ -184,6 +197,8 @@ class AgentWebSocketServer:
                 self._last_snapshot = current_snapshot
 
             diagnosis = self.diagnostic_engine.evaluate(current_snapshot)
+            self._last_diagnosis = diagnosis
+            self._last_explanation = None
             logger.info(
                 "Diagnostic engine evaluated snapshot -> label: %s, rule: %s, severity: %s, health_score: %d, processes: %s",
                 diagnosis.label,
@@ -227,12 +242,76 @@ class AgentWebSocketServer:
             await self.safe_send(websocket, json.dumps(resp))
 
         elif msg_type == "benchmark_request":
-            # Phase 6 placeholder
-            resp = {
-                "type": "benchmark_result",
-                "score": 0,
-                "breakdown": {"cpu": 0, "disk": 0, "gpu": 0},
+            # Phase 6: Run safe synthetic multi-component performance benchmark
+            loop = asyncio.get_running_loop()
+            logger.info("Executing synthetic benchmark request...")
+            bench_res = await loop.run_in_executor(None, self.benchmark_runner.run_benchmark)
+            self._last_benchmark_result = bench_res
+            await self.safe_send(websocket, json.dumps(bench_res))
+
+        elif msg_type == "export_pdf_request":
+            # Phase 6: Generate and export comprehensive system health report PDF
+            loop = asyncio.get_running_loop()
+            logger.info("Generating system health report PDF...")
+            current_snapshot = self._last_snapshot
+            if current_snapshot is None:
+                current_snapshot = await loop.run_in_executor(
+                    None, self.system_collector.collect_snapshot
+                )
+                self._last_snapshot = current_snapshot
+
+            snap_dict = self.snapshot_to_message(current_snapshot).model_dump()
+
+            if self._last_diagnosis is not None:
+                diag_dict = self._last_diagnosis.to_diagnosis_response(
+                    explanation=self._last_explanation,
+                    llm_call_succeeded=bool(self._last_explanation),
+                )
+            else:
+                diag = self.diagnostic_engine.evaluate(current_snapshot)
+                diag_dict = diag.to_diagnosis_response(llm_call_succeeded=False)
+
+            # Historical timeline summary
+            history_data = await loop.run_in_executor(
+                None, self.db.query_timeline, None, None, 100
+            )
+            timeline_summary = {
+                "snapshot_count": len(history_data.get("snapshots", [])),
+                "diagnosis_count": len(history_data.get("diagnoses", [])),
             }
+
+            def _generate() -> tuple[str, bytes]:
+                return generate_health_report_pdf(
+                    snapshot=snap_dict,
+                    diagnosis=diag_dict,
+                    explanation=self._last_explanation or diag_dict.get("explanation"),
+                    timeline_summary=timeline_summary,
+                    benchmark=self._last_benchmark_result,
+                )
+
+            try:
+                pdf_path, pdf_bytes = await loop.run_in_executor(None, _generate)
+                pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+                filename = Path(pdf_path).name
+                resp = {
+                    "type": "export_pdf_result",
+                    "success": True,
+                    "pdf_path": pdf_path,
+                    "filename": filename,
+                    "pdf_base64": pdf_b64,
+                    "error": None,
+                }
+            except Exception as e:
+                logger.error("Failed to generate health report PDF: %s", e, exc_info=True)
+                resp = {
+                    "type": "export_pdf_result",
+                    "success": False,
+                    "pdf_path": "",
+                    "filename": "",
+                    "pdf_base64": None,
+                    "error": str(e),
+                }
+
             await self.safe_send(websocket, json.dumps(resp))
 
         else:
@@ -254,6 +333,7 @@ class AgentWebSocketServer:
             )
 
             if ai_result.succeeded and ai_result.explanation:
+                self._last_explanation = ai_result.explanation
                 # Update SQLite with full LLM findings
                 await loop.run_in_executor(
                     None,
@@ -275,6 +355,7 @@ class AgentWebSocketServer:
             else:
                 # Fallback: update SQLite with failure status and push fallback message
                 fallback_expl = ai_result.get_fallback_explanation(diagnosis)
+                self._last_explanation = fallback_expl
                 await loop.run_in_executor(
                     None,
                     self.db.update_diagnosis_explanation,

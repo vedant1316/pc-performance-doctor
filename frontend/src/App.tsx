@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { Dashboard } from './pages/Dashboard';
 import { DiagnosisResult } from './pages/DiagnosisResult';
 import { Timeline } from './pages/Timeline';
+import { Benchmark } from './pages/Benchmark';
 import { HealthReport } from './pages/HealthReport';
 import { createDiagnoseRequest } from './lib/api';
 
@@ -16,8 +17,13 @@ export const App: React.FC = () => {
     latencyMs,
     lastDiagnosis,
     lastTimelineResult,
+    lastBenchmarkResult,
+    isBenchmarking,
+    isExportingPdf,
     sendMessage,
     queryTimeline,
+    runBenchmark,
+    exportPdf,
     reconnect,
   } = useAgentSocket();
 
@@ -66,13 +72,33 @@ export const App: React.FC = () => {
           />
         )}
 
-        {activeTab === 'report' && <HealthReport />}
+        {activeTab === 'benchmark' && (
+          <Benchmark
+            benchmarkResult={lastBenchmarkResult}
+            isBenchmarking={isBenchmarking}
+            onRunBenchmark={runBenchmark}
+            isConnected={status === 'connected'}
+          />
+        )}
+
+        {activeTab === 'report' && (
+          <HealthReport
+            latestTick={latestTick}
+            lastDiagnosis={lastDiagnosis}
+            lastTimelineResult={lastTimelineResult}
+            lastBenchmarkResult={lastBenchmarkResult}
+            isExportingPdf={isExportingPdf}
+            onExportPdf={exportPdf}
+            onDiagnose={handleDiagnose}
+            isConnected={status === 'connected'}
+          />
+        )}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>PC Performance Doctor • Phase 5 AI Explanation Layer</span>
+          <span>PC Performance Doctor • Phase 6 Advanced Features</span>
           <span className="font-mono text-[11px] text-slate-600">
             WebSocket: ws://127.0.0.1:8765
           </span>
@@ -83,3 +109,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

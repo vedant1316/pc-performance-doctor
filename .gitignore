@@ -19,8 +19,10 @@ dist/
 src-tauri/target/
 
 # Data
+data/
 data/*.db
-data/*.db-journal
+data/*.db-*
+data/reports/
 
 # OS
 .DS_Store

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ConnectionStatus, MetricsTick, DiagnosisResult, TimelineResult } from '../types/telemetry';
+import {
+  ConnectionStatus,
+  MetricsTick,
+  DiagnosisResult,
+  TimelineResult,
+  BenchmarkResult,
+  ExportPdfResult,
+} from '../types/telemetry';
 
 const DEFAULT_WS_URL = 'ws://127.0.0.1:8765';
 const MAX_HISTORY_LENGTH = 40;
@@ -12,8 +19,14 @@ export interface UseAgentSocketReturn {
   latencyMs: number | null;
   lastDiagnosis: DiagnosisResult | null;
   lastTimelineResult: TimelineResult | null;
+  lastBenchmarkResult: BenchmarkResult | null;
+  isBenchmarking: boolean;
+  lastPdfResult: ExportPdfResult | null;
+  isExportingPdf: boolean;
   sendMessage: (data: unknown) => void;
   queryTimeline: (start?: string, end?: string) => void;
+  runBenchmark: () => void;
+  exportPdf: () => void;
   reconnect: () => void;
 }
 
@@ -24,6 +37,10 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastDiagnosis, setLastDiagnosis] = useState<DiagnosisResult | null>(null);
   const [lastTimelineResult, setLastTimelineResult] = useState<TimelineResult | null>(null);
+  const [lastBenchmarkResult, setLastBenchmarkResult] = useState<BenchmarkResult | null>(null);
+  const [isBenchmarking, setIsBenchmarking] = useState<boolean>(false);
+  const [lastPdfResult, setLastPdfResult] = useState<ExportPdfResult | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -88,6 +105,35 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
             setLastDiagnosis(data as DiagnosisResult);
           } else if (data.type === 'timeline_result') {
             setLastTimelineResult(data as TimelineResult);
+          } else if (data.type === 'benchmark_result') {
+            setLastBenchmarkResult(data as BenchmarkResult);
+            setIsBenchmarking(false);
+          } else if (data.type === 'export_pdf_result') {
+            const pdfRes = data as ExportPdfResult;
+            setLastPdfResult(pdfRes);
+            setIsExportingPdf(false);
+
+            if (pdfRes.success && pdfRes.pdf_base64) {
+              try {
+                const byteCharacters = atob(pdfRes.pdf_base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = pdfRes.filename || 'health_report.pdf';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(downloadUrl);
+              } catch (err) {
+                console.error('Failed to trigger PDF download:', err);
+              }
+            }
           }
         } catch (err) {
           console.error('Failed to parse incoming WebSocket message:', err);
@@ -137,6 +183,16 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
     });
   }, [sendMessage]);
 
+  const runBenchmark = useCallback(() => {
+    setIsBenchmarking(true);
+    sendMessage({ type: 'benchmark_request' });
+  }, [sendMessage]);
+
+  const exportPdf = useCallback(() => {
+    setIsExportingPdf(true);
+    sendMessage({ type: 'export_pdf_request' });
+  }, [sendMessage]);
+
   const reconnect = useCallback(() => {
     reconnectAttemptsRef.current = 0;
     connect();
@@ -160,9 +216,16 @@ export function useAgentSocket(url: string = DEFAULT_WS_URL): UseAgentSocketRetu
     latencyMs,
     lastDiagnosis,
     lastTimelineResult,
+    lastBenchmarkResult,
+    isBenchmarking,
+    lastPdfResult,
+    isExportingPdf,
     sendMessage,
     queryTimeline,
+    runBenchmark,
+    exportPdf,
     reconnect,
   };
 }
+
 

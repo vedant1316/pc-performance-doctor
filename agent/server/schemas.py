@@ -163,3 +163,32 @@ class BenchmarkRequestMessage(BaseModel):
     type: Literal["benchmark_request"] = "benchmark_request"
 
 
+class BenchmarkBreakdown(BaseModel):
+    """Component breakdown for benchmark result."""
+    cpu: int
+    disk: int
+    gpu: int
+
+
+class BenchmarkResultMessage(BaseModel):
+    """Benchmark execution response matching Section 10 contract."""
+    type: Literal["benchmark_result"] = "benchmark_result"
+    score: int
+    breakdown: BenchmarkBreakdown
+
+
+class ExportPdfRequestMessage(BaseModel):
+    """Request to generate and export a PDF health report."""
+    type: Literal["export_pdf_request"] = "export_pdf_request"
+
+
+class ExportPdfResultMessage(BaseModel):
+    """Response containing exported PDF file metadata and payload."""
+    type: Literal["export_pdf_result"] = "export_pdf_result"
+    success: bool
+    pdf_path: str
+    filename: str
+    pdf_base64: str | None = None
+    error: str | None = None
+
+

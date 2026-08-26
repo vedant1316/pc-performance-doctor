@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConnectionStatus } from '../types/telemetry';
-import { Activity, Stethoscope, Clock, FileText, WifiOff, RefreshCw, Zap } from 'lucide-react';
+import { Activity, Stethoscope, Clock, FileText, WifiOff, RefreshCw, Zap, Gauge } from 'lucide-react';
 
 interface HeaderProps {
   status: ConnectionStatus;
@@ -60,8 +60,10 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'dashboard', label: 'Live Dashboard', icon: <Activity className="w-4 h-4" /> },
     { id: 'diagnostics', label: 'Diagnosis', icon: <Stethoscope className="w-4 h-4" />, badge: 'Phase 3' },
     { id: 'timeline', label: 'Timeline', icon: <Clock className="w-4 h-4" />, badge: 'Phase 4' },
+    { id: 'benchmark', label: 'Benchmark', icon: <Gauge className="w-4 h-4" />, badge: 'Phase 6' },
     { id: 'report', label: 'Health Report', icon: <FileText className="w-4 h-4" />, badge: 'Phase 6' },
   ];
+
 
   return (
     <header className="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md sticky top-0 z-50">

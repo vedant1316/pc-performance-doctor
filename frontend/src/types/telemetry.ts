@@ -113,3 +113,25 @@ export interface TimelineResult {
   diagnoses: TimelineDiagnosisRow[];
 }
 
+export interface BenchmarkBreakdown {
+  cpu: number;
+  disk: number;
+  gpu: number;
+}
+
+export interface BenchmarkResult {
+  type: 'benchmark_result';
+  score: number;
+  breakdown: BenchmarkBreakdown;
+}
+
+export interface ExportPdfResult {
+  type: 'export_pdf_result';
+  success: boolean;
+  pdf_path: string;
+  filename: string;
+  pdf_base64?: string | null;
+  error?: string | null;
+}
+
+

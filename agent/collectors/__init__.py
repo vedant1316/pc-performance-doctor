@@ -104,42 +104,58 @@ class SystemCollector:
 
     def collect_snapshot(self) -> MetricsSnapshot:
         """Execute all collectors and return a consolidated MetricsSnapshot."""
-        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        com_init = False
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            com_init = True
+        except Exception:
+            pass
 
-        cpu = self.cpu_collector.collect()
-        ram = self.ram_collector.collect()
-        disk = self.disk_collector.collect()
-        gpu = self.gpu_collector.collect()
-        net = self.network_collector.collect()
-        procs = self.process_collector.collect()
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-        return MetricsSnapshot(
-            timestamp=timestamp,
-            cpu_percent=cpu["cpu_percent"],
-            cpu_temp_c=cpu["cpu_temp_c"],
-            per_core_percent=cpu["per_core_percent"],
-            cpu_freq_mhz=cpu["cpu_freq_mhz"],
-            ram_percent=ram["ram_percent"],
-            ram_available_mb=ram["ram_available_mb"],
-            ram_total_mb=ram["ram_total_mb"],
-            ram_used_mb=ram["ram_used_mb"],
-            pagefile_percent=ram["pagefile_percent"],
-            pagefile_used_mb=ram["pagefile_used_mb"],
-            pagefile_total_mb=ram["pagefile_total_mb"],
-            disk_percent_busy=disk["disk_percent_busy"],
-            disk_read_bps=disk["disk_read_bps"],
-            disk_write_bps=disk["disk_write_bps"],
-            gpu_percent=gpu["gpu_percent"],
-            gpu_temp_c=gpu["gpu_temp_c"],
-            gpu_vram_percent=gpu["gpu_vram_percent"],
-            gpu_name=gpu["gpu_name"],
-            net_sent_bps=net["net_sent_bps"],
-            net_recv_bps=net["net_recv_bps"],
-            top_processes=procs["top_processes"],
-            top_process_cpu_percent=procs["top_process_cpu_percent"],
-            top_process_io_percent=procs["top_process_io_percent"],
-            all_processes=procs["all_processes"],
-        )
+            cpu = self.cpu_collector.collect()
+            ram = self.ram_collector.collect()
+            disk = self.disk_collector.collect()
+            gpu = self.gpu_collector.collect()
+            net = self.network_collector.collect()
+            procs = self.process_collector.collect()
+
+            return MetricsSnapshot(
+                timestamp=timestamp,
+                cpu_percent=cpu["cpu_percent"],
+                cpu_temp_c=cpu["cpu_temp_c"],
+                per_core_percent=cpu["per_core_percent"],
+                cpu_freq_mhz=cpu["cpu_freq_mhz"],
+                ram_percent=ram["ram_percent"],
+                ram_available_mb=ram["ram_available_mb"],
+                ram_total_mb=ram["ram_total_mb"],
+                ram_used_mb=ram["ram_used_mb"],
+                pagefile_percent=ram["pagefile_percent"],
+                pagefile_used_mb=ram["pagefile_used_mb"],
+                pagefile_total_mb=ram["pagefile_total_mb"],
+                disk_percent_busy=disk["disk_percent_busy"],
+                disk_read_bps=disk["disk_read_bps"],
+                disk_write_bps=disk["disk_write_bps"],
+                gpu_percent=gpu["gpu_percent"],
+                gpu_temp_c=gpu["gpu_temp_c"],
+                gpu_vram_percent=gpu["gpu_vram_percent"],
+                gpu_name=gpu["gpu_name"],
+                net_sent_bps=net["net_sent_bps"],
+                net_recv_bps=net["net_recv_bps"],
+                top_processes=procs["top_processes"],
+                top_process_cpu_percent=procs["top_process_cpu_percent"],
+                top_process_io_percent=procs["top_process_io_percent"],
+            )
+        finally:
+            if com_init:
+                try:
+                    import pythoncom
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+
 
 
 _system_collector_instance = SystemCollector()

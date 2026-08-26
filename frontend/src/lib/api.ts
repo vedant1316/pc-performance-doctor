@@ -18,6 +18,11 @@ export function createBenchmarkRequest() {
   return { type: 'benchmark_request' };
 }
 
+export function createExportPdfRequest() {
+  return { type: 'export_pdf_request' };
+}
+
 export function createPingRequest() {
   return { type: 'ping' };
 }
+
