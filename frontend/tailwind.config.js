@@ -4,45 +4,40 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        background: '#090d16',
-        surface: '#0f172a',
-        'surface-card': '#141e33',
-        'surface-border': '#1e293b',
-        primary: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-        },
-        cyan: {
-          400: '#22d3ee',
-          500: '#06b6d4',
-        },
-        emerald: {
-          400: '#34d399',
-          500: '#10b981',
-        },
-        amber: {
-          400: '#fbbf24',
-          500: '#f59e0b',
-        },
-        rose: {
-          400: '#fb7185',
-          500: '#f43f5e',
-        }
+        background: '#f8fafc',
+        surface: '#ffffff',
+        'surface-subtle': '#f1f5f9',
+        'surface-border': '#e2e8f0',
+        'surface-border-strong': '#cbd5e1',
       },
       fontFamily: {
-        sans: ['Inter', 'Outfit', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'sans-serif',
+        ],
+        mono: [
+          '"Cascadia Code"',
+          'Consolas',
+          '"SFMono-Regular"',
+          'Menlo',
+          'Monaco',
+          '"Courier New"',
+          'monospace',
+        ],
       },
-      animation: {
-        'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'spin-slow': 'spin 8s linear infinite',
+      boxShadow: {
+        'subtle': '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        'panel': '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05)',
+        'elevated': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+      },
+      borderRadius: {
+        'panel': '8px',
+        'control': '6px',
       }
     },
   },

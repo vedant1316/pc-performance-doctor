@@ -11,6 +11,7 @@ interface DashboardProps {
   history: MetricsTick[];
   lastDiagnosis: DiagnosisResult | null;
   onDiagnose: () => void;
+  onViewDiagnosis?: () => void;
 }
 
 function formatBytes(bytesPerSec: number): string {
@@ -26,6 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   history,
   lastDiagnosis,
   onDiagnose,
+  onViewDiagnosis = () => {},
 }) => {
   // Sparkline history extraction
   const cpuHistory = history.map((t) => ({ value: t.cpu_percent }));
@@ -33,7 +35,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const diskHistory = history.map((t) => ({ value: t.disk_percent_busy }));
   const netRecvHistory = history.map((t) => ({ value: t.net_recv_bps / 1024 })); // KB/s
 
-  // Default fallback values if agent is connecting
+  // Telemetry metrics
   const cpuPercent = latestTick?.cpu_percent ?? 0;
   const ramPercent = latestTick?.ram_percent ?? 0;
   const diskBusy = latestTick?.disk_percent_busy ?? 0;
@@ -42,42 +44,44 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const netRecv = latestTick?.net_recv_bps ?? 0;
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner / Diagnose Card */}
+    <div className="space-y-4">
+      {/* Primary Action / Diagnostic Card */}
       <DiagnosticActionCard
         isConnected={status === 'connected'}
+        isDiagnosing={false}
         onDiagnose={onDiagnose}
         lastDiagnosis={lastDiagnosis}
+        onViewDiagnosis={onViewDiagnosis}
       />
 
       {/* Primary Metrics 5-Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
         {/* 1. CPU Card */}
         <MetricGauge
-          title="Processor (CPU)"
+          title="Processor"
           value={cpuPercent.toFixed(1)}
           percentage={cpuPercent}
-          icon={<Cpu className="w-5 h-5" />}
-          color={cpuPercent > 80 ? 'rose' : cpuPercent > 50 ? 'amber' : 'indigo'}
+          icon={<Cpu className="w-4 h-4" />}
           historyData={cpuHistory}
-          statusText={cpuPercent > 85 ? 'HIGH LOAD' : 'NORMAL'}
+          statusText={cpuPercent > 85 ? 'High Load' : 'Normal'}
           badges={[
             {
-              label: 'Temp',
-              value: latestTick?.cpu_temp_c !== null && latestTick?.cpu_temp_c !== undefined
-                ? `${latestTick.cpu_temp_c}°C`
-                : 'N/A',
+              label: 'Temperature',
+              value:
+                latestTick?.cpu_temp_c !== null && latestTick?.cpu_temp_c !== undefined
+                  ? `${latestTick.cpu_temp_c}°C`
+                  : 'N/A',
             },
             {
-              label: 'Clock',
+              label: 'Clock Frequency',
               value: latestTick?.cpu_freq_mhz ? `${Math.round(latestTick.cpu_freq_mhz)} MHz` : '--',
             },
             {
-              label: 'Cores',
-              value: latestTick?.per_core_percent ? `${latestTick.per_core_percent.length} Cores` : '--',
+              label: 'Logical Cores',
+              value: latestTick?.per_core_percent ? `${latestTick.per_core_percent.length}` : '--',
             },
             {
-              label: 'Top Proc',
+              label: 'Max Process Load',
               value: latestTick?.top_process_cpu_percent ? `${latestTick.top_process_cpu_percent}%` : '--',
             },
           ]}
@@ -85,63 +89,61 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* 2. Memory (RAM) Card */}
         <MetricGauge
-          title="Memory (RAM)"
+          title="Memory"
           value={ramPercent.toFixed(1)}
           percentage={ramPercent}
-          icon={<Memory className="w-5 h-5" />}
-          color={ramPercent > 85 ? 'rose' : ramPercent > 70 ? 'amber' : 'cyan'}
+          icon={<Memory className="w-4 h-4" />}
           historyData={ramHistory}
-          statusText={ramPercent > 85 ? 'PRESSURE' : 'OPTIMAL'}
+          statusText={ramPercent > 85 ? 'Pressure' : 'Optimal'}
           badges={[
             {
               label: 'Available',
-              value: latestTick ? `${latestTick.ram_available_mb} MB` : '--',
+              value: latestTick?.ram_available_mb ? `${(latestTick.ram_available_mb / 1024).toFixed(1)} GB` : '--',
             },
             {
               label: 'Used / Total',
               value:
                 latestTick?.ram_used_mb && latestTick?.ram_total_mb
-                  ? `${(latestTick.ram_used_mb / 1024).toFixed(1)}/${(latestTick.ram_total_mb / 1024).toFixed(1)} GB`
+                  ? `${(latestTick.ram_used_mb / 1024).toFixed(1)} / ${(latestTick.ram_total_mb / 1024).toFixed(1)} GB`
                   : '--',
             },
             {
-              label: 'Pagefile',
+              label: 'Paging File',
               value:
                 latestTick?.pagefile_percent !== null && latestTick?.pagefile_percent !== undefined
                   ? `${latestTick.pagefile_percent}%`
                   : '--',
             },
             {
-              label: 'Swap MB',
-              value: latestTick?.ram_available_mb ? `${latestTick.ram_available_mb} MB free` : '--',
+              label: 'Free Memory',
+              value: latestTick?.ram_available_mb ? `${latestTick.ram_available_mb} MB` : '--',
             },
           ]}
         />
 
         {/* 3. Disk I/O Card */}
         <MetricGauge
-          title="Disk Activity"
+          title="Storage Activity"
           value={diskBusy.toFixed(1)}
           percentage={diskBusy}
-          icon={<HardDrive className="w-5 h-5" />}
-          color={diskBusy > 80 ? 'rose' : 'emerald'}
+          icon={<HardDrive className="w-4 h-4" />}
           historyData={diskHistory}
-          statusText={diskBusy > 80 ? 'BUSY' : 'IDLE'}
+          statusText={diskBusy > 80 ? 'Busy' : 'Idle'}
           badges={[
             {
-              label: 'Read',
+              label: 'Read Speed',
               value: latestTick?.disk_read_bps !== undefined ? formatBytes(latestTick.disk_read_bps) : '--',
             },
             {
-              label: 'Write',
+              label: 'Write Speed',
               value: latestTick?.disk_write_bps !== undefined ? formatBytes(latestTick.disk_write_bps) : '--',
             },
             {
-              label: 'Max I/O',
+              label: 'Max Process I/O',
               value: latestTick?.top_process_io_percent ? `${latestTick.top_process_io_percent}%` : '--',
             },
             {
-              label: 'Active %',
+              label: 'Active Queue',
               value: `${diskBusy.toFixed(0)}%`,
             },
           ]}
@@ -149,34 +151,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* 4. GPU Card */}
         <MetricGauge
-          title="Graphics (GPU)"
+          title="Graphics Adapter"
           subtitle={latestTick?.gpu_name || 'Display Adapter'}
           value={gpuPercent !== null ? gpuPercent.toFixed(1) : 'N/A'}
           percentage={gpuPercent}
-          icon={<Gamepad2 className="w-5 h-5" />}
-          color="indigo"
-          statusText={gpuPercent !== null ? (gpuPercent > 80 ? 'HIGH' : 'NORMAL') : 'STANDBY'}
+          icon={<Gamepad2 className="w-4 h-4" />}
+          statusText={gpuPercent !== null ? (gpuPercent > 80 ? 'High' : 'Normal') : 'Standby'}
           badges={[
             {
-              label: 'Temp',
+              label: 'Temperature',
               value:
                 latestTick?.gpu_temp_c !== null && latestTick?.gpu_temp_c !== undefined
                   ? `${latestTick.gpu_temp_c}°C`
                   : 'N/A',
             },
             {
-              label: 'VRAM',
+              label: 'VRAM Allocation',
               value:
                 latestTick?.gpu_vram_percent !== null && latestTick?.gpu_vram_percent !== undefined
                   ? `${latestTick.gpu_vram_percent.toFixed(1)}%`
                   : 'N/A',
             },
             {
-              label: 'Device',
+              label: 'Architecture',
               value: latestTick?.gpu_name ? latestTick.gpu_name.split(' ')[0] : 'Standard',
             },
             {
-              label: 'Load',
+              label: 'Core Load',
               value: gpuPercent !== null ? `${gpuPercent.toFixed(0)}%` : '--',
             },
           ]}
@@ -184,28 +185,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* 5. Network Throughput Card */}
         <MetricGauge
-          title="Network I/O"
+          title="Network Interface"
           value={formatBytes(netRecv + netSent)}
           unit=""
-          icon={<Network className="w-5 h-5" />}
-          color="cyan"
+          icon={<Network className="w-4 h-4" />}
           historyData={netRecvHistory}
-          statusText="ACTIVE"
+          statusText="Active"
           badges={[
             {
-              label: 'Download (↓)',
+              label: 'Download (In)',
               value: formatBytes(netRecv),
             },
             {
-              label: 'Upload (↑)',
+              label: 'Upload (Out)',
               value: formatBytes(netSent),
             },
             {
-              label: 'Sent Raw',
+              label: 'Transmit Rate',
               value: `${Math.round(netSent / 8)} B/s`,
             },
             {
-              label: 'Recv Raw',
+              label: 'Receive Rate',
               value: `${Math.round(netRecv / 8)} B/s`,
             },
           ]}
@@ -214,27 +214,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Per-Core Visualizer (if multi-core data available) */}
       {latestTick?.per_core_percent && latestTick.per_core_percent.length > 0 && (
-        <div className="glass-card rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-semibold text-slate-300 flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-indigo-400" />
+        <div className="app-panel p-4">
+          <div className="flex items-center justify-between mb-2.5">
+            <h4 className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-slate-500" />
               <span>Logical Core Utilization ({latestTick.per_core_percent.length} Cores)</span>
             </h4>
-            <span className="text-[11px] font-mono text-slate-400">
+            <span className="text-[11px] text-slate-500 tabular-nums">
               Avg: {(latestTick.per_core_percent.reduce((a, b) => a + b, 0) / latestTick.per_core_percent.length).toFixed(1)}%
             </span>
           </div>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+          <div className="grid grid-cols-4 sm:grid-cols-8 md:grid-cols-12 gap-1.5">
             {latestTick.per_core_percent.map((corePct, idx) => (
-              <div key={idx} className="bg-slate-900/70 border border-slate-800/80 rounded-xl p-2 flex flex-col justify-between">
+              <div key={idx} className="bg-slate-50 border border-slate-100 rounded p-1.5 flex flex-col justify-between">
                 <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1">
                   <span>C{idx}</span>
-                  <span className="font-mono text-slate-200">{corePct.toFixed(0)}%</span>
+                  <span className="text-slate-700 font-medium tabular-nums">{corePct.toFixed(0)}%</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
                   <div
-                    className={`h-full transition-all duration-500 ${
-                      corePct > 80 ? 'bg-rose-500' : corePct > 50 ? 'bg-amber-400' : 'bg-indigo-500'
+                    className={`h-full transition-all duration-300 ${
+                      corePct > 80 ? 'bg-rose-500' : corePct > 50 ? 'bg-amber-500' : 'bg-slate-800'
                     }`}
                     style={{ width: `${Math.min(100, Math.max(0, corePct))}%` }}
                   />

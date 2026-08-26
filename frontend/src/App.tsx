@@ -33,7 +33,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-slate-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       {/* Top Navbar */}
       <Header
         status={status}
@@ -44,7 +44,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
         {activeTab === 'dashboard' && (
           <Dashboard
             status={status}
@@ -52,6 +52,7 @@ export const App: React.FC = () => {
             history={history}
             lastDiagnosis={lastDiagnosis}
             onDiagnose={handleDiagnose}
+            onViewDiagnosis={() => setActiveTab('diagnostics')}
           />
         )}
 
@@ -95,12 +96,12 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/60 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>CoreSight • Intelligent Hardware Diagnostics &amp; Benchmarks</span>
-          <span className="font-mono text-[11px] text-slate-600">
-            WebSocket: ws://127.0.0.1:8765
+      {/* Clean Desktop App Footer */}
+      <footer className="border-t border-slate-200 py-3 text-xs text-slate-500 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>CoreSight • Hardware Diagnostics &amp; Telemetry</span>
+          <span className="font-mono text-[11px] text-slate-400">
+            Agent: ws://127.0.0.1:8765
           </span>
         </div>
       </footer>
@@ -109,4 +110,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-
